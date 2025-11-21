@@ -1,7 +1,7 @@
 import requests
 import pandas as pd
 from custom_data_load import read_excel_file
-from tqdm import tqdm  # for progress bar
+from tqdm import tqdm  # progress bar
 
 # ====== Config ======
 CLIMATIQ_API_KEY = "ANKDEMM85D3PDCD4NMQ3FPJNS0"
@@ -9,7 +9,6 @@ API_URL = "https://api.climatiq.io/data/v1/estimate"
 
 # ====== Function to estimate CO2e for a single chemical ======
 def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY):
-
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -17,11 +16,10 @@ def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY)
 
     data = {
         "emission_factor": {
-            "activity_id": activity_id,
-            
+            "activity_id": activity_id
         },
         "parameters": {
-            "weight": weight_kg,
+            "amount": weight_kg,
             "unit": "kg"
         }
     }
@@ -42,7 +40,7 @@ def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY)
 file_path = "l_o_freq_request_data.xlsx"
 df = read_excel_file(file_path, sheet_name="Emissions from P&T Proc by Chem")
 
-# Rename columns
+# Rename columns for easier use
 df.rename(columns={
     'Fluorinated GHG Emissions (metric tons)': 'Emissions_metric_tons',
     'Fluorinated GHG Emissions\n(mt CO2e)': 'Emissions_mtCO2e'
@@ -65,12 +63,13 @@ activity_mapping = {
 
 df['activity_id'] = df['Fluorinated GHG Name'].map(activity_mapping)
 
-
+# Keep only supported chemicals
 df_supported = df.dropna(subset=['activity_id']).copy()
 
+# Convert metric tons to kg
 df_supported['weight_kg'] = df_supported['Emissions_metric_tons'] * 1000
 
-# ====== Group by activity to reduce API calls ======
+# Group by activity to reduce API calls
 grouped = df_supported.groupby('activity_id')['weight_kg'].sum().reset_index()
 
 # ====== Estimate CO2e per activity ======
@@ -78,11 +77,11 @@ co2e_results = {}
 for _, row in tqdm(grouped.iterrows(), total=len(grouped), desc="Estimating CO2e"):
     co2e_results[row['activity_id']] = estimate_chemical_emission(row['activity_id'], row['weight_kg'])
 
-# ====== Map CO2e back to original DataFrame ======
+# Map CO2e back to original DataFrame
 df_supported['CO2e_kg'] = df_supported['activity_id'].map(co2e_results)
 
-
+# Display results
 print(df_supported[['Fluorinated GHG Name', 'Emissions_metric_tons', 'CO2e_kg']].head())
 
-# Optionally, save to Excel
+# Save to Excel
 df_supported.to_excel("emissions_with_CO2e.xlsx", index=False)
