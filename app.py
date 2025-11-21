@@ -17,7 +17,6 @@ def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY)
     data = {
         "emission_factor": {
             "activity_id": activity_id
-            # optionally, you can add "data_version": "27.27" if known to be valid
         },
         "parameters": {
             "weight": weight_kg,
@@ -76,14 +75,21 @@ if uploaded_file:
     # Estimate CO2e per activity
     co2e_results = {}
     for _, row in grouped.iterrows():
-        co2e_results[row['activity_id']] = estimate_chemical_emission(row['activity_id'], row['weight_kg'])
+        co2e = estimate_chemical_emission(row['activity_id'], row['weight_kg'])
+        if co2e is not None:
+            co2e_results[row['activity_id']] = co2e
+        else:
+            st.warning(f"CO2e could not be calculated for {row['activity_id']}")
 
-    # Map CO2e back to original DataFrame proportionally
-    df_supported['CO2e_kg'] = df_supported.apply(
-        lambda row: co2e_results[row['activity_id']] * (row['weight_kg'] / grouped.loc[grouped['activity_id']==row['activity_id'], 'weight_kg'].values[0])
-        if row['activity_id'] in co2e_results and co2e_results[row['activity_id']] is not None else None,
-        axis=1
-    )
+    # Map CO2e back proportionally
+    def map_co2e(row):
+        if row['activity_id'] in co2e_results:
+            total_weight = grouped.loc[grouped['activity_id'] == row['activity_id'], 'weight_kg'].values[0]
+            return co2e_results[row['activity_id']] * (row['weight_kg'] / total_weight)
+        else:
+            return None
+
+    df_supported['CO2e_kg'] = df_supported.apply(map_co2e, axis=1)
 
     # Show results
     st.subheader("Results")
@@ -94,3 +100,4 @@ if uploaded_file:
     df_supported.to_excel(output, index=False)
     output.seek(0)
     st.download_button("Download results as Excel", data=output, file_name="emissions_with_CO2e.xlsx")
+
