@@ -22,7 +22,7 @@ def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY)
         },
         "parameters": {
             "weight": weight_kg,
-            "weight_unit": "kg"
+            "unit": "kg"
         }
     }
 
