@@ -18,7 +18,7 @@ def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY)
     data = {
         "emission_factor": {
             "activity_id": activity_id,
-            "data_version": "27.27"
+            
         },
         "parameters": {
             "weight": weight_kg,
