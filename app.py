@@ -15,20 +15,17 @@ def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY)
         "Content-Type": "application/json"
     }
     data = {
-        "emission_factor": {
-            "activity_id": activity_id,
-       
-        },
-        "parameters": {
-            "weight": weight_kg,
-            "weight_unit": "kg"
-        }
+        "emission_factor": {"activity_id": activity_id},
+        "parameters": {"weight": weight_kg, "weight_unit": "kg"}
     }
+
     try:
         response = requests.post(API_URL, json=data, headers=headers)
         response.raise_for_status()
         result = response.json()
         co2e = result.get("co2e", {}).get("value")
+        if co2e is None:
+            st.warning(f"No CO2e returned for {activity_id} with weight {weight_kg}.")
         return co2e
     except requests.exceptions.RequestException as e:
         st.warning(f"API request failed for {activity_id} with weight {weight_kg}: {e}")
@@ -48,7 +45,7 @@ if uploaded_file:
         'Fluorinated GHG Emissions\n(mt CO2e)': 'Emissions_mtCO2e'
     }, inplace=True)
 
-    # Activity mapping
+    # Map supported gases
     activity_mapping = {
         "HFC-227ea": "fugitive-hfc-227ea",
         "HFC-23": "fugitive-hfc-23",
@@ -67,16 +64,13 @@ if uploaded_file:
     df_supported = df.dropna(subset=['activity_id']).copy()
     df_supported['weight_kg'] = df_supported['Emissions_metric_tons'] * 1000
 
-    # Group by activity
-    grouped = df_supported.groupby('activity_id')['weight_kg'].sum().reset_index()
+    # Estimate CO2e per row
+    df_supported['CO2e_kg'] = df_supported.apply(
+        lambda row: estimate_chemical_emission(row['activity_id'], row['weight_kg']),
+        axis=1
+    )
 
-    # Estimate CO2e
-    co2e_results = {}
-    for _, row in grouped.iterrows():
-        co2e_results[row['activity_id']] = estimate_chemical_emission(row['activity_id'], row['weight_kg'])
-
-    df_supported['CO2e_kg'] = df_supported['activity_id'].map(co2e_results)
-
+    # Show results
     st.subheader("Results")
     st.dataframe(df_supported[['Fluorinated GHG Name', 'Emissions_metric_tons', 'CO2e_kg']])
 
