@@ -3,30 +3,21 @@ import pandas as pd
 import requests
 from io import BytesIO
 from custom_data_load import read_excel_file
-from tqdm import tqdm
+from tqdm import tqdm  # progress bar
 
 # ====== Config ======
 CLIMATIQ_API_KEY = "ANKDEMM85D3PDCD4NMQ3FPJNS0"
 API_URL = "https://api.climatiq.io/data/v1/estimate"
 
-# ====== Function to estimate CO2e for a single chemical ======
+# ====== Function to estimate CO2e per chemical ======
 def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY):
-    """
-    Estimate CO2e (kg) for a given chemical using Climatiq API.
-    """
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     data = {
-        "emission_factor": {
-            "activity_id": activity_id,
-            "data_version": "27.27"
-        },
-        "parameters": {
-            "weight": weight_kg,
-            "weight_unit": "kg"
-        }
+        "emission_factor": {"activity_id": activity_id, "data_version": "27.27"},
+        "parameters": {"weight": weight_kg, "weight_unit": "kg"}
     }
     try:
         response = requests.post(API_URL, json=data, headers=headers)
@@ -42,19 +33,19 @@ def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY)
 
 # ====== Streamlit UI ======
 st.title("Fluorinated GHG CO2e Estimator")
-st.write("Upload an Excel file to estimate CO2e for fluorinated greenhouse gases.")
 
 uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx"])
 
 if uploaded_file:
-    # Read Excel
     df = read_excel_file(uploaded_file, sheet_name="Emissions from P&T Proc by Chem")
+    
+    # Rename columns
     df.rename(columns={
         'Fluorinated GHG Emissions (metric tons)': 'Emissions_metric_tons',
         'Fluorinated GHG Emissions\n(mt CO2e)': 'Emissions_mtCO2e'
     }, inplace=True)
-
-    # Activity mapping
+    
+    # Map gases to activity IDs
     activity_mapping = {
         "HFC-227ea": "fugitive-hfc-227ea",
         "HFC-23": "fugitive-hfc-23",
@@ -68,36 +59,28 @@ if uploaded_file:
         "HFC-410A": "fugitive-hfc-410a",
         "R-22": "fugitive-hcfc-22"
     }
-
-    df['activity_id'] = df['Fluorinated GHG Name'].map(activity_mapping)
+    
+    df['activity_id'] = df['Fluorinated GHG Name'].str.strip().map(activity_mapping)
     df_supported = df.dropna(subset=['activity_id']).copy()
+    
+    # Convert tons → kg
     df_supported['weight_kg'] = df_supported['Emissions_metric_tons'] * 1000
-
-    # Group by activity to reduce API calls
-    grouped = df_supported.groupby('activity_id')['weight_kg'].sum().reset_index()
-
-    # Progress bar in Streamlit
-    st.info("Estimating CO2e for each chemical...")
-    co2e_results = {}
-    progress_bar = st.progress(0)
-    for idx, (_, row) in enumerate(grouped.iterrows()):
-        co2e_results[row['activity_id']] = estimate_chemical_emission(row['activity_id'], row['weight_kg'])
-        progress_bar.progress((idx + 1) / len(grouped))
-
-    # Map CO2e back to original DataFrame
-    df_supported['CO2e_kg'] = df_supported['activity_id'].map(co2e_results)
-
-    # Display results
+    
+    # ====== Compute CO2e per row with progress bar ======
+    st.info("Estimating CO2e for each row. This may take a few seconds per row...")
+    co2e_values = []
+    for idx, row in tqdm(df_supported.iterrows(), total=len(df_supported), desc="Estimating CO2e"):
+        co2e = estimate_chemical_emission(row['activity_id'], row['weight_kg'])
+        co2e_values.append(co2e)
+    df_supported['CO2e_kg'] = co2e_values
+    
+    # ====== Show results ======
     st.subheader("Results")
     st.dataframe(df_supported[['Fluorinated GHG Name', 'Emissions_metric_tons', 'CO2e_kg']])
-
-    # Download button
+    
+    # ====== Download results ======
     output = BytesIO()
     df_supported.to_excel(output, index=False)
     output.seek(0)
-    st.download_button(
-        "Download results as Excel",
-        data=output,
-        file_name="emissions_with_CO2e.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    st.download_button("Download results as Excel", data=output, file_name="emissions_with_CO2e.xlsx")
+
