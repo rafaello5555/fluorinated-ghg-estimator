@@ -5,7 +5,7 @@ from io import BytesIO
 from custom_data_load import read_excel_file  # your custom loader
 
 # ====== Config ======
-CLIMATIQ_API_KEY = "ANKDEMM85D3PDCD4NMQ3FPJNS0"
+CLIMATIQ_API_KEY = "FCVBNJRBJN269E758AR8TAC04G"
 API_URL = "https://api.climatiq.io/data/v1/estimate"
 
 # ====== Function to estimate CO2e ======
