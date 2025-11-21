@@ -15,9 +15,7 @@ def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY)
         "Content-Type": "application/json"
     }
     data = {
-        "emission_factor": {
-            "activity_id": activity_id
-        },
+        "emission_factor": activity_id,  # <-- use string directly
         "parameters": {
             "weight": weight_kg,
             "weight_unit": "kg"
@@ -35,6 +33,7 @@ def estimate_chemical_emission(activity_id, weight_kg, api_key=CLIMATIQ_API_KEY)
     except requests.exceptions.RequestException as e:
         st.warning(f"API request failed for {activity_id} with weight {weight_kg}: {e}")
         return None
+
 
 # ====== Streamlit UI ======
 st.title("Fluorinated GHG CO2e Estimator")
